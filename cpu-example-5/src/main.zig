@@ -9,9 +9,9 @@ var RAM: [Capacity]u8 = [_]u8{0} ** Capacity;
 
 const CPU = struct {
     var ip: u32 = 0;
-    var x: i32 = 0;
-    var y: i32 = 0;
-    var a: i32 = 0;
+    var x: u32 = 0;
+    var y: u32 = 0;
+    var a: u32 = 0;
 };
 
 pub fn memWrite(address: u32, value: u8) void {
@@ -20,6 +20,14 @@ pub fn memWrite(address: u32, value: u8) void {
 
 pub fn memRead(address: u32) u8 {
     return RAM[address % Capacity];
+}
+
+pub fn printMem() !void {
+    var i: u32 = 0;
+    while (i < Capacity) {
+        try writer.print("[{x}]: {d}\n", .{ i, memRead(i) });
+        i += 1;
+    }
 }
 
 pub fn printReg() !void {
@@ -46,36 +54,63 @@ pub fn subY() !void {
     CPU.a -= CPU.y;
 }
 
-pub fn addXImmediate(imm: i32) !void {
+pub fn addXImmediate(imm: u32) !void {
     try writer.print("ADD X, {d}\n", .{imm});
     CPU.x += imm;
 }
 
-pub fn addYImmediate(imm: i32) !void {
+pub fn addYImmediate(imm: u32) !void {
     try writer.print("ADD Y, {d}\n", .{imm});
     CPU.y += imm;
 }
 
-pub fn subXImmediate(imm: i32) !void {
+pub fn subXImmediate(imm: u32) !void {
     try writer.print("SUB X, {d}\n", .{imm});
     CPU.x -= imm;
 }
 
-pub fn subYImmediate(imm: i32) !void {
+pub fn subYImmediate(imm: u32) !void {
     try writer.print("SUB Y, {d}\n", .{imm});
     CPU.y -= imm;
 }
 
-pub fn read2Bytes() i32 {
-    const result: i32 = @as(i32, RAM[CPU.ip] << 16) | @as(i32, RAM[CPU.ip + 1]);
+pub fn storeA(address: u32) !void {
+    try writer.print("STA {d}\n", .{address});
+
+    memWrite(address, @truncate(CPU.a >> 24));
+    memWrite(address + 1, @truncate(CPU.a >> 16));
+    memWrite(address + 2, @truncate(CPU.a >> 8));
+    memWrite(address + 3, @truncate(CPU.a));
+}
+
+pub fn storeX(address: u32) !void {
+    try writer.print("STX {d}\n", .{address});
+
+    memWrite(address, @truncate(CPU.x >> 24));
+    memWrite(address + 1, @truncate(CPU.x >> 16));
+    memWrite(address + 2, @truncate(CPU.x >> 8));
+    memWrite(address + 3, @truncate(CPU.x));
+}
+
+pub fn storeY(address: u32) !void {
+    try writer.print("STY {d}\n", .{address});
+
+    memWrite(address, @truncate(CPU.y >> 24));
+    memWrite(address + 1, @truncate(CPU.y >> 16));
+    memWrite(address + 2, @truncate(CPU.y >> 8));
+    memWrite(address + 3, @truncate(CPU.y));
+}
+
+pub fn read2Bytes() u32 {
+    const result: u32 = @as(u32, RAM[CPU.ip] << 16) | @as(u32, RAM[CPU.ip + 1]);
 
     CPU.ip += 2;
 
     return result;
 }
 
-pub fn read4Bytes() i32 {
-    const result = (@as(i32, RAM[CPU.ip]) << 24 | @as(i32, RAM[CPU.ip + 1]) << 16 | @as(i32, RAM[CPU.ip + 2]) << 8 | @as(i32, RAM[CPU.ip + 3]));
+pub fn read4Bytes() u32 {
+    const result = (@as(u32, RAM[CPU.ip]) << 24 | @as(u32, RAM[CPU.ip + 1]) << 16 | @as(u32, RAM[CPU.ip + 2]) << 8 | @as(u32, RAM[CPU.ip + 3]));
 
     CPU.ip += 4;
 
@@ -85,8 +120,8 @@ pub fn read4Bytes() i32 {
 pub fn runOp(opcode: OpCode) !void {
     switch (opcode) {
         OpCode.AddX => {
-            try addX();
             CPU.ip += 1;
+            try addX();
         },
         OpCode.AddXImmediate => {
             CPU.ip += 1;
@@ -95,8 +130,8 @@ pub fn runOp(opcode: OpCode) !void {
             try addXImmediate(read4Bytes());
         },
         OpCode.AddY => {
-            try addY();
             CPU.ip += 1;
+            try addY();
         },
         OpCode.AddYImmediate => {
             CPU.ip += 1;
@@ -105,12 +140,12 @@ pub fn runOp(opcode: OpCode) !void {
             try addYImmediate(read4Bytes());
         },
         OpCode.SubX => {
-            try subX();
             CPU.ip += 1;
+            try subX();
         },
         OpCode.SubY => {
-            try subY();
             CPU.ip += 1;
+            try subY();
         },
         OpCode.SubXImmediate => {
             CPU.ip += 1;
@@ -123,11 +158,20 @@ pub fn runOp(opcode: OpCode) !void {
 
             // Read the next 4 bytes as the integer.
             try subYImmediate(read4Bytes());
-
-            CPU.ip += 4;
         },
         OpCode.LoadA, OpCode.LoadX, OpCode.LoadY => {},
-        OpCode.StoreA, OpCode.StoreX, OpCode.StoreY => {},
+        OpCode.StoreA => {
+            CPU.ip += 1;
+            try storeA(read4Bytes());
+        },
+        OpCode.StoreX => {
+            CPU.ip += 1;
+            try storeX(read4Bytes());
+        },
+        OpCode.StoreY => {
+            CPU.ip += 1;
+            try storeY(read4Bytes());
+        },
         OpCode.Halt => {},
     }
 }
@@ -145,11 +189,17 @@ pub fn main() !void {
     RAM[9] = 0x04;
     RAM[10] = @intFromEnum(OpCode.AddX);
     RAM[11] = @intFromEnum(OpCode.AddY);
-    RAM[12] = @intFromEnum(OpCode.Halt);
+    RAM[12] = @intFromEnum(OpCode.StoreA);
+    RAM[13] = 0x00;
+    RAM[14] = 0x00;
+    RAM[15] = 0x01;
+    RAM[16] = 0x00;
+    RAM[17] = @intFromEnum(OpCode.Halt);
 
     while (RAM[CPU.ip] != @as(u8, @intFromEnum(OpCode.Halt))) {
         try runOp(@enumFromInt(RAM[CPU.ip]));
     }
 
     try printReg();
+    try printMem();
 }
