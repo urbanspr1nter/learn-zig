@@ -25,9 +25,13 @@ pub fn memRead(address: u32) u8 {
 pub fn printMem() !void {
     var i: u32 = 0;
     while (i < Capacity) {
-        try writer.print("[{x}]: {d}\n", .{ i, memRead(i) });
+        if (i % 16 == 0) {
+            try writer.print("\n", .{});
+        }
+        try writer.print("[{x:0>4}]: {d:0>3} ", .{ i, memRead(i) });
         i += 1;
     }
+    try writer.print("\n", .{});
 }
 
 pub fn printReg() !void {
@@ -101,6 +105,21 @@ pub fn storeY(address: u32) !void {
     memWrite(address + 3, @truncate(CPU.y));
 }
 
+pub fn loadA(address: u32) !void {
+    try writer.print("LDA {d}\n", .{address});
+    CPU.a = @as(u32, RAM[address]) << 24 | @as(u32, RAM[address + 1]) | @as(u32, RAM[address + 2]) | @as(u32, RAM[address + 3]);
+}
+
+pub fn loadX(address: u32) !void {
+    try writer.print("LDX {d}\n", .{address});
+    CPU.x = @as(u32, RAM[address]) << 24 | @as(u32, RAM[address + 1]) << 16 | @as(u32, RAM[address + 2]) << 8 | @as(u32, RAM[address + 3]);
+}
+
+pub fn loadY(address: u32) !void {
+    try writer.print("LDY {d}\n", .{address});
+    CPU.y = @as(u32, RAM[address]) << 24 | @as(u32, RAM[address + 1]) << 16 | @as(u32, RAM[address + 2]) << 8 | @as(u32, RAM[address + 3]);
+}
+
 pub fn read2Bytes() u32 {
     const result: u32 = @as(u32, RAM[CPU.ip] << 16) | @as(u32, RAM[CPU.ip + 1]);
 
@@ -159,7 +178,18 @@ pub fn runOp(opcode: OpCode) !void {
             // Read the next 4 bytes as the integer.
             try subYImmediate(read4Bytes());
         },
-        OpCode.LoadA, OpCode.LoadX, OpCode.LoadY => {},
+        OpCode.LoadA => {
+            CPU.ip += 1;
+            try loadA(read4Bytes());
+        },
+        OpCode.LoadX => {
+            CPU.ip += 1;
+            try loadX(read4Bytes());
+        },
+        OpCode.LoadY => {
+            CPU.ip += 1;
+            try loadY(read4Bytes());
+        },
         OpCode.StoreA => {
             CPU.ip += 1;
             try storeA(read4Bytes());
@@ -194,7 +224,13 @@ pub fn main() !void {
     RAM[14] = 0x00;
     RAM[15] = 0x01;
     RAM[16] = 0x00;
-    RAM[17] = @intFromEnum(OpCode.Halt);
+    RAM[17] = @intFromEnum(OpCode.LoadX);
+    RAM[18] = 0x00;
+    RAM[19] = 0x00;
+    RAM[20] = 0x01;
+    RAM[21] = 0x00;
+    RAM[22] = @intFromEnum(OpCode.AddX);
+    RAM[23] = @intFromEnum(OpCode.Halt);
 
     while (RAM[CPU.ip] != @as(u8, @intFromEnum(OpCode.Halt))) {
         try runOp(@enumFromInt(RAM[CPU.ip]));
